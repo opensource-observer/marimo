@@ -33,6 +33,7 @@ import {
   SETUP_CELL_ID,
   useCellActions,
   useCellIds,
+  useCellNames,
   useScrollKey,
 } from "../../../core/cells/cells";
 import { formatAll } from "../../../core/codemirror/format";
@@ -168,6 +169,7 @@ const CellColumn: React.FC<{
   theme,
 }) => {
   const cellIds = useCellIds();
+  const cellNames = useCellNames();
   const column = cellIds.get(columnId);
   invariant(column, `Expected column for: ${columnId}`);
 
@@ -214,11 +216,16 @@ const CellColumn: React.FC<{
         )}
 
         {column.topLevelIds.map((cellId) => {
+          // Don't render the setup_pyoso cell so users can't delete it
+          if (cellNames[cellId] === "setup_pyoso") {
+            return null;
+          }
+
           // Skip the setup cell later
           if (cellId === SETUP_CELL_ID) {
             return null;
           }
-
+        
           return (
             <Cell
               key={cellId}
