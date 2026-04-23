@@ -11,11 +11,18 @@ declare global {
 }
 
 if (import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY) {
+  // Read identity passed from the parent page via URL fragment to stitch events
+  // under the same distinct_id without emitting a spurious $identify event.
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const distinctID = fragment.get("posthogDistinctId") ?? undefined;
+  const sessionID = fragment.get("posthogSessionId") ?? undefined;
+
   posthog.init(import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY, {
+    bootstrap: distinctID ? { distinctID, sessionID, isIdentifiedID: true } : undefined,
     session_recording: {
       // WARNING: Only enable this if you understand the security implications
       recordCrossOriginIframes: true,
-    }
+    },
   });
 } else {
   console.warn("POSTHOG_PUBLIC_API_KEY not set, skipping posthog init");
