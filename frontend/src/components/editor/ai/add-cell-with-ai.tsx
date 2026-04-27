@@ -259,8 +259,8 @@ export const AddCellWithAI: React.FC<{
         },
       }
     }));
-    return () => {
-    }
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    return () => {}
   }, []);
 
   return (

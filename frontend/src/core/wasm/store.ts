@@ -93,6 +93,7 @@ export class CompositeFileStore implements FileStore {
     this.stores.splice(index, 0, store);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getStore<T extends FileStore>(ctor: new (...args: any[]) => T): T | null {
     const store = this.stores.find((store) => store instanceof ctor) as T;
     return store ?? null;

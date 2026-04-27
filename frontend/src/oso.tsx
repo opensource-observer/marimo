@@ -25,6 +25,7 @@ if (import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY) {
     },
   });
 } else {
+  // eslint-disable-next-line no-console
   console.warn("POSTHOG_PUBLIC_API_KEY not set, skipping posthog init");
 }
 
@@ -35,6 +36,7 @@ if (el) {
     throw new Error("[marimo] mount config not found");
   }
   mount(window.__MARIMO_MOUNT_CONFIG__, el).catch((e) => {
+    // eslint-disable-next-line no-console
     console.error("Failed to mount marimo app", e);
   });
 } else {
