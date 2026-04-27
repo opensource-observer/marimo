@@ -2,6 +2,7 @@
 
 import posthog from 'posthog-js'
 import { mount } from "@/oso-mount";
+import { Logger } from "@/utils/Logger";
 
 
 declare global {
@@ -25,8 +26,7 @@ if (import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY) {
     },
   });
 } else {
-  // eslint-disable-next-line no-console
-  console.warn("POSTHOG_PUBLIC_API_KEY not set, skipping posthog init");
+  Logger.warn("POSTHOG_PUBLIC_API_KEY not set, skipping posthog init");
 }
 
 // eslint-disable-next-line ssr-friendly/no-dom-globals-in-module-scope
@@ -36,8 +36,7 @@ if (el) {
     throw new Error("[marimo] mount config not found");
   }
   mount(window.__MARIMO_MOUNT_CONFIG__, el).catch((e) => {
-    // eslint-disable-next-line no-console
-    console.error("Failed to mount marimo app", e);
+    Logger.error("Failed to mount marimo app", e);
   });
 } else {
   throw new Error("[marimo] root element not found");

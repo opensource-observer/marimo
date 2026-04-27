@@ -294,10 +294,8 @@ class FragmentNotebookFileStore implements FileStore {
   }
 
   saveFile(contents: string): void {
-    // eslint-disable-next-line no-console
-    console.log("Saving file to fragment store");
-    // eslint-disable-next-line no-console
-    console.log("Contents:", contents);
+    Logger.log("Saving file to fragment store");
+    Logger.log("Contents:", contents);
     this.fragmentStore.setCompressedString("code", contents);
     this.fragmentStore.commit();
   }
