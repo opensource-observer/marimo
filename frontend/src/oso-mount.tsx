@@ -294,8 +294,8 @@ class FragmentNotebookFileStore implements FileStore {
   }
 
   saveFile(contents: string): void {
-    Logger.log("Saving file to fragment store");
-    Logger.log("Contents:", contents);
+    console.log("Saving file to fragment store");
+    console.log("Contents:", contents);
     this.fragmentStore.setCompressedString("code", contents);
     this.fragmentStore.commit();
   }

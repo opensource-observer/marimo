@@ -259,6 +259,8 @@ export const AddCellWithAI: React.FC<{
         },
       }
     }));
+    return () => {
+    }
   }, []);
 
   return (
