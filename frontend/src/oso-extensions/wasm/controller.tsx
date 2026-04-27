@@ -40,7 +40,7 @@ export class DefaultWasmController implements WasmController {
     version: string;
     pyodideVersion: string;
   }): Promise<PyodideInterface> {
-    Logger.log(`boostrapping wasm with marimo version ${opts.version} pyodide version ${opts.pyodideVersion}`);
+    Logger.log(`bootstrapping wasm with marimo version ${opts.version} pyodide version ${opts.pyodideVersion}`);
     const pyodide = await this.loadPyodideAndPackages(opts);
 
     if (MAKE_SNAPSHOT) {

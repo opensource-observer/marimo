@@ -93,7 +93,7 @@ export class NotebookRpc extends RpcTarget implements NotebookRpcServer {
     this.hostControls = stub;
     this.fsReadyResolve();
 
-    // Send postMesage to the parent to establish the connection
+    // Send postMessage to the parent to establish the connection
     const init: InitializationCommand = {
       command: "initialize",
       id: reqCommand.id,
