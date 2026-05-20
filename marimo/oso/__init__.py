@@ -39,6 +39,152 @@ pyoso_db_conn = pyoso.Client().dbapi_connection()
 """.strip()
 
 
+def _reload_notebook_from_code(bridge: "InterceptingPyodideBridge", code: str) -> None:
+    """Replace the open notebook with the given source code without restarting Pyodide.
+
+    The Python interpreter (and therefore any user-defined variables / imports
+    that have already executed) is preserved. Only the cell list shown in the
+    editor is replaced — the frontend's ``handleKernelReady`` listener picks up
+    the re-emitted ``KernelReady`` message and atomically swaps every cell via
+    ``setCells``.
+
+    To preserve cell outputs for cells whose code hasn't materially changed,
+    we follow the same pattern marimo's kiosk-mode connection uses
+    (``marimo/_server/api/endpoints/ws.py:_replay_previous_session``):
+    after emitting ``KernelReady(resumed=True)`` we replay every operation
+    cached on ``session.session_view`` — outputs, variables, datasets, etc.
+    ``AppFileManager.reload()`` preserves the cell IDs of cells whose code
+    matches (or closely resembles) a previous cell via
+    ``sort_cell_ids_by_similarity``, so the replayed ``CellOp`` messages
+    land on the right cells. Operations for deleted cells are tolerated
+    by the frontend (``updateCellRuntimeState`` warns and no-ops).
+    """
+
+    from marimo._messaging.ops import (
+        KernelCapabilities,
+        KernelReady,
+        serialize,
+    )
+    from marimo._runtime.requests import ExecuteMultipleRequest
+
+    if not code:
+        raise ValueError("Cannot load notebook from empty code")
+
+    # Inject the setup_pyoso cell if it's missing, so refreshed notebooks
+    # keep their pyoso DB connection (same invariant as the initial load).
+    prepared_code = ensure_pyoso_setup(code)
+
+    nb_path = bridge.session.app_manager.path
+    if not nb_path:
+        raise ValueError(
+            "Cannot reload notebook: session has no notebook filename"
+        )
+
+    # Snapshot the previous cells' code keyed by cell ID *before* we reload.
+    # PyodideSession does not populate ``session_view.last_executed_code``
+    # (the regular Session does it via ``add_control_request``, which the
+    # Pyodide path skips), so we build the map ourselves. After reload,
+    # ``sort_cell_ids_by_similarity`` preserves IDs for matched cells, so
+    # cells whose code is unchanged will have ``last_executed_code[id] ==
+    # current code`` and the frontend's ``edited`` flag stays false. Edited
+    # cells whose ID was preserved by the similarity match will see
+    # ``last_executed_code[id] != current code`` and get the "stale" marker.
+    prev_app = bridge.session.app_manager.app
+    prev_codes_by_id: dict[str, str] = {}
+    for cid in prev_app.cell_manager.cell_ids():
+        prev_code = prev_app.cell_manager.get_cell_code(cid)
+        if prev_code is not None:
+            prev_codes_by_id[cid] = prev_code
+
+    # Write the new contents to the virtual filesystem and reload the app
+    # through the same path used by AppFileManager at startup. This re-uses
+    # marimo's own cell-id-stability heuristic in ``reload()``.
+    with open(nb_path, "w", encoding="utf-8") as f:
+        f.write(prepared_code)
+
+    # ``reload()`` returns the set of cell IDs that are either brand-new or
+    # whose code differs from the previous version. We use it below to
+    # auto-run only the cells that need re-running, leaving unchanged cells
+    # (and their replayed outputs / kernel runtime state) alone.
+    changed_cell_ids = bridge.session.app_manager.reload()
+    app = bridge.session.app_manager.app
+
+    # Build last_executed_code keyed by the new cell IDs. For cells whose
+    # ID was preserved by the similarity match, we know their prior code.
+    # Fresh cell IDs have no entry, so the frontend treats them as
+    # never-run rather than edited.
+    new_cell_ids = tuple(app.cell_manager.cell_ids())
+    last_executed_code = {
+        cid: prev_codes_by_id[cid]
+        for cid in new_cell_ids
+        if cid in prev_codes_by_id
+    }
+    last_execution_time = dict(
+        bridge.session.session_view.last_execution_time
+    )
+
+    bridge.session.session_consumer(
+        (
+            KernelReady.name,
+            serialize(
+                KernelReady(
+                    codes=tuple(app.cell_manager.codes()),
+                    names=tuple(app.cell_manager.names()),
+                    configs=tuple(app.cell_manager.configs()),
+                    cell_ids=new_cell_ids,
+                    layout=bridge.session.app_manager.read_layout_config(),
+                    # resumed=True tells handleKernelReady to skip its
+                    # sendInstantiate step (which would re-run all cells)
+                    # and preserve any existing UI element values.
+                    resumed=True,
+                    ui_values=dict(bridge.session.session_view.ui_values),
+                    last_executed_code=last_executed_code,
+                    last_execution_time=last_execution_time,
+                    app_config=app.config,
+                    kiosk=False,
+                    capabilities=KernelCapabilities(),
+                )
+            ),
+        )
+    )
+
+    # Replay every operation cached on the session view so outputs,
+    # variables, datasets, etc. survive the reload. We deliberately use
+    # ``session_consumer`` (not ``_on_message``) so the replayed ops are
+    # delivered to the frontend without being re-added to ``session_view``
+    # — that would cause unbounded duplication on every reload.
+    new_cell_id_set = set(new_cell_ids)
+    for op in bridge.session.session_view.operations:
+        # Skip cell-ops for cells that no longer exist. The frontend
+        # tolerates these (just logs a warning), but pruning them keeps
+        # the console clean and avoids leaking stale state if some other
+        # consumer of the message stream is less forgiving.
+        cell_id = getattr(op, "cell_id", None)
+        if cell_id is not None and cell_id not in new_cell_id_set:
+            continue
+        bridge.session.session_consumer((op.name, serialize(op)))
+
+    # Auto-run new and code-changed cells. The kernel's reactive engine
+    # will cascade re-runs through downstream dependents, so we only need
+    # to enqueue the directly-changed cells. Mirrors the file-watcher
+    # autorun path in ``marimo/_server/sessions.py:912-931``.
+    if changed_cell_ids:
+        code_by_id = dict(
+            zip(new_cell_ids, tuple(app.cell_manager.codes()))
+        )
+        to_run_ids = [
+            cid for cid in changed_cell_ids if cid in code_by_id
+        ]
+        if to_run_ids:
+            bridge.session.put_control_request(
+                ExecuteMultipleRequest(
+                    cell_ids=to_run_ids,
+                    codes=[code_by_id[cid] for cid in to_run_ids],
+                    request=None,
+                )
+            )
+
+
 class InterceptingPyodideBridge(PyodideBridge):
     FUNCTIONS: dict[str, t.Callable[..., None]] = {
         "__oso_initialize_env": initialize_env,
@@ -51,7 +197,7 @@ class InterceptingPyodideBridge(PyodideBridge):
 
     def put_control_request(self, request: str):
         """For OSO specific injection, we intercept the FunctionRequest control request
-        
+
         To do this we parse the request string as json
         """
         logger.debug("Intercepting PyodideBridge control request")
@@ -59,8 +205,8 @@ class InterceptingPyodideBridge(PyodideBridge):
             json_data = json.loads(request)
         except json.JSONDecodeError:
             return super().put_control_request(request)
-        
-        
+
+
         function_call_id = json_data.get("functionCallId", "")
         function_name = json_data.get("functionName", "")
         args = json_data.get("args", {})
@@ -70,6 +216,12 @@ class InterceptingPyodideBridge(PyodideBridge):
             return super().put_control_request(request)
 
         logger.debug(f"overriding a function call {function_name}")
+
+        # Functions that need access to the bridge/session (vs. global state
+        # mutations like setting env vars) are dispatched here directly,
+        # outside the FUNCTIONS registry whose entries have no `self`.
+        if function_name == "__oso_load_notebook_code":
+            return _reload_notebook_from_code(self, **args)
 
         # Here we can add OSO specific handling
         # For example, we could modify the function call in some way

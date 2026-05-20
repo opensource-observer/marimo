@@ -14,7 +14,7 @@ export interface NotebookControls {
 
   triggerAlert: (message: string) => Promise<void>;
 
-  captureNotebookPreview: () => Promise<string | null>;
+  loadNotebookCode: (code: string) => Promise<void>;
 }
 
 export type NotebookControlsStub = RpcStub<NotebookControls>;
@@ -28,14 +28,14 @@ export type NotebookControlsKey = keyof Omit<
 export type NotebookControlsHandler<K extends NotebookControlsKey> =
   NotebookControls[K];
 
-export type InitializationCommand = {
+export interface InitializationCommand {
   command: "initialize";
   id: string;
   sendPort: MessagePort;
   recvPort: MessagePort;
 };
 
-export type RequestConnectionCommand = {
+export interface RequestConnectionCommand {
   command: "requestConnection";
   id: string;
 };
