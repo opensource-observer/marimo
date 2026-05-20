@@ -13,6 +13,7 @@ import { useNotebookRpcServer } from "./notebook-rpc";
 import { useCaptureNotebookPreview } from "@/oso-extensions/use-capture-preview";
 import { notebookFileStore } from "@/core/wasm/store";
 import { PostMessageFileStore } from "@/oso-extensions/post-message-filestore";
+import { generateUUID } from "@/utils/uuid";
 
 declare global {
   interface WindowEventMap {
@@ -42,6 +43,17 @@ export const OSOWrapper: React.FC<PropsWithChildren> = ({ children }) => {
     });
   }, [actions]);
 
+  const loadNotebookCode = useCallback(async (code: string) => {
+    const bridge = PyodideBridge.INSTANCE;
+    await bridge.initialized.promise;
+    await bridge.sendFunctionRequest({
+      functionCallId: generateUUID(),
+      functionName: "__oso_load_notebook_code",
+      namespace: "marimo.oso",
+      args: { code },
+    });
+  }, []);
+
   useEffect(() => {
     const filestore = notebookFileStore.getStore(PostMessageFileStore);
     if (!filestore) {
@@ -54,7 +66,7 @@ export const OSOWrapper: React.FC<PropsWithChildren> = ({ children }) => {
   }, [capturePreview, confirmPreviewSave]);
 
   notebookRpcServer.registerHandler("createCell", createCellAtEnd);
-  notebookRpcServer.registerHandler("captureNotebookPreview", capturePreview);
+  notebookRpcServer.registerHandler("loadNotebookCode", loadNotebookCode);
 
   const addCellWithAICallback = useCallback((ev: CustomEvent<AddCellWithAIHook>) => {
     const { setInput } = ev.detail;

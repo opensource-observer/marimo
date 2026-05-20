@@ -132,9 +132,9 @@ export class NotebookRpc extends RpcTarget implements NotebookRpcServer {
     handler(message);
   }
 
-  async captureNotebookPreview(): Promise<string | null> {
-    const handler = this.getHandler("captureNotebookPreview");
-    return handler();
+  async loadNotebookCode(code: string): Promise<void> {
+    const handler = this.getHandler("loadNotebookCode");
+    return handler(code);
   }
 
   registerHandler<K extends NotebookControlsKey>(key: K, handler: NotebookControlsHandler<K>) {
@@ -159,6 +159,9 @@ export class DummyNotebookRpc implements NotebookRpcServer {
   async captureNotebookPreview(): Promise<string | null> {
     console.warn("DummyNotebookRpc: captureNotebookPreview called");
     return null;
+  }
+  async loadNotebookCode(code: string): Promise<void> {
+    console.warn("DummyNotebookRpc: loadNotebookCode called with code length:", code.length);
   }
   listen(): void {
     console.warn("DummyNotebookRpc: listen called");
