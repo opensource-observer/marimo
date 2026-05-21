@@ -156,10 +156,6 @@ export class DummyNotebookRpc implements NotebookRpcServer {
   async triggerAlert(message: string): Promise<void> {
     alert(`DummyNotebookRpc: ${message}`);
   }
-  async captureNotebookPreview(): Promise<string | null> {
-    console.warn("DummyNotebookRpc: captureNotebookPreview called");
-    return null;
-  }
   async loadNotebookCode(code: string): Promise<void> {
     console.warn("DummyNotebookRpc: loadNotebookCode called with code length:", code.length);
   }
