@@ -16,6 +16,22 @@ if (import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY) {
   const distinctID = fragment.get("posthogDistinctId") ?? undefined;
   const sessionID = fragment.get("posthogSessionId") ?? undefined;
 
+  // Strip the identity params from the URL once consumed, so they don't linger
+  // in a shareable/openable link and stitch events under the wrong identity.
+  // Only the PostHog keys are removed; any other fragment state is preserved.
+  if (distinctID || sessionID) {
+    fragment.delete("posthogDistinctId");
+    fragment.delete("posthogSessionId");
+    const rest = fragment.toString();
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname +
+        window.location.search +
+        (rest ? `#${rest}` : ""),
+    );
+  }
+
   posthog.init(import.meta.env.VITE_POSTHOG_PUBLIC_API_KEY, {
     bootstrap: distinctID
       ? { distinctID, sessionID, isIdentifiedID: true }
