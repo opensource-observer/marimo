@@ -108,8 +108,23 @@ export class NotebookRpc extends RpcTarget implements NotebookRpcServer {
     if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
       return true;
     }
-    const domain = new URL(origin).hostname;
-    return this.allowedDomains.includes(domain);
+    let domain: string;
+    try {
+      domain = new URL(origin).hostname;
+    } catch {
+      return false;
+    }
+    // Allow an exact match or any subdomain of an allowed domain. Listing a
+    // base domain (e.g. "oso.xyz") therefore also permits "www.oso.xyz" and
+    // per-branch preview hosts such as "<branch>.preview.oso.xyz", which are
+    // dynamic and cannot be enumerated in the allow-list. Without subdomain
+    // matching, the host <-> notebook postMessage handshake is rejected on
+    // preview deployments, so the notebook never receives its host-driven
+    // initialization (including the full-width app-config overload) and
+    // renders at its narrow authored width.
+    return this.allowedDomains.some(
+      (allowed) => domain === allowed || domain.endsWith(`.${allowed}`),
+    );
   }
 
   // We allow late registration of handlers so we can use different handlers
