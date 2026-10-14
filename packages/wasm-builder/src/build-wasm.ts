@@ -133,9 +133,12 @@ export async function buildPyodideLockFile(options: PyodideLockFileOptions) {
   await pyodide.loadPackage("micropip");
 
 
+  // Pin to marimo's own ranges (pyproject.toml): micropip won't downgrade an
+  // already-installed package, so an unpinned latest here makes the marimo
+  // wheel's install fail.
   const packages = (options.packages || []).concat([
-    "Markdown",
-    "pymdown-extensions",
+    "Markdown>=3.4,<4",
+    "pymdown-extensions>=10.11.2,<11",
     "narwhals",
     "packaging",
   ]);
